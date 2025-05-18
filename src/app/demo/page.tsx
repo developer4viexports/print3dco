@@ -1,8 +1,8 @@
 // src/app/demo/page.tsx
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Canvas, useLoader, useThree } from '@react-three/fiber';
+import React, { useState, useEffect } from 'react';
+import { Canvas, useLoader } from '@react-three/fiber';
 import { OrbitControls, Grid, Bounds } from '@react-three/drei';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 

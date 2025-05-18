@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { FeatureSection } from "src/components/FeatureSection";
 import Hero from "src/components/Hero";
 import { ModelingServicesSection } from "src/components/ModelingService";

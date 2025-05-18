@@ -145,7 +145,7 @@ export default function ContactPage() {
                             animate={{ scale: 1, opacity: 1 }}
                             transition={{ duration: 0.5 }}
                         >
-                            {['name', 'email', 'subject'].map((field, idx) => (
+                            {['name', 'email', 'subject'].map((field) => (
                                 <div key={field}>
                                     <label className="block mb-1 font-medium text-[var(--color-foreground)]" htmlFor={field}>
                                         {field.charAt(0).toUpperCase() + field.slice(1)}
