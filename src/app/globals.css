@@ -1,0 +1,115 @@
+@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Multiple Theme Variations:
+  1) Default Corporate
+  2) Sunset Gradient
+  3) Cool Night Sky
+  4) Ocean Breeze
+  5) Forest Greens
+  6) Midnight Neon
+*/
+
+/* 1) Default Corporate (no class needed) */
+:root {
+  /* --color-background: #F5F7FA;
+  --color-foreground: #1F2937;
+  --color-primary: #0F4C81;
+  --color-secondary: #008080;
+  --color-accent: #EAB308; */
+  --color-background: #0B0F2D;
+  --color-foreground: #E0E6F8;
+  --color-primary: #3B82F6;
+  --color-secondary: #6366F1;
+  --color-accent: #22D3EE;
+  --font-sans: 'Inter', Arial, Helvetica, sans-serif;
+  --font-mono: 'Fira Code', Menlo, monospace;
+}
+
+/* 2) Sunset Gradient */
+.theme-sunset {
+  --color-background: #FFFAF1;
+  --color-foreground: #40241F;
+  --color-primary: #FF5E5B;
+  --color-secondary: #FFA34F;
+  --color-accent: #FFB8B1;
+}
+
+/* 3) Cool Night Sky */
+.theme-night {
+  --color-background: #0B0F2D;
+  --color-foreground: #E0E6F8;
+  --color-primary: #3B82F6;
+  --color-secondary: #6366F1;
+  --color-accent: #22D3EE;
+}
+
+/* 4) Ocean Breeze */
+.theme-ocean {
+  --color-background: #E0F7FA;
+  --color-foreground: #004D40;
+  --color-primary: #00ACC1;
+  --color-secondary: #00838F;
+  --color-accent: #26C6DA;
+}
+
+/* 5) Forest Greens */
+.theme-forest {
+  --color-background: #E8F5E9;
+  --color-foreground: #1B5E20;
+  --color-primary: #43A047;
+  --color-secondary: #2E7D32;
+  --color-accent: #A5D6A7;
+}
+
+/* 6) Midnight Neon */
+.theme-midnight {
+  --color-background: #121212;
+  --color-foreground: #E6E6E6;
+  --color-primary: #BB86FC;
+  --color-secondary: #03DAC6;
+  --color-accent: #CF6679;
+}
+
+/* Optional dark adjustment based on system */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #0a0a0a;
+    --color-foreground: #ededed;
+  }
+}
+
+/* Base element styles */
+@layer base {
+  html {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+
+  a {
+    color: var(--color-accent);
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
+
+  code,
+  pre {
+    font-family: var(--font-mono);
+  }
+}
+
+/* Arrow animation */
+.animate-arrow-forward {
+  transition: transform 0.3s;
+}
+
+a:hover .animate-arrow-forward {
+  transform: translateX(4px);
+}
