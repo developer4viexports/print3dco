@@ -13,6 +13,9 @@
 # testing
 /coverage
 
+# uploaded 3D files
+/uploads
+
 # next.js
 /.next/
 /out/

@@ -1,35 +1,46 @@
 @import "tailwindcss";
+@config "../../tailwind.config.js";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /*
-  Multiple Theme Variations:
-  1) Default Corporate
-  2) Sunset Gradient
-  3) Cool Night Sky
-  4) Ocean Breeze
-  5) Forest Greens
-  6) Midnight Neon
+  Print3DCo theme.
+  Default = Light (robu.in style: white surfaces, red brand accent).
+  Add the `dark` class to <html> to switch to the dark "Night" palette.
 */
 
-/* 1) Default Corporate (no class needed) */
+/* Default: Light */
 :root {
-  /* --color-background: #F5F7FA;
-  --color-foreground: #1F2937;
-  --color-primary: #0F4C81;
-  --color-secondary: #008080;
-  --color-accent: #EAB308; */
-  --color-background: #0B0F2D;
-  --color-foreground: #E0E6F8;
-  --color-primary: #3B82F6;
-  --color-secondary: #6366F1;
-  --color-accent: #22D3EE;
+  --color-background: #FFFFFF;
+  --color-surface: #F1F5FB;
+  --color-foreground: #1E2A3A;
+  --color-primary: #2563EB;   /* brand blue */
+  --color-secondary: #1E3A8A; /* navy */
+  --color-accent: #38BDF8;    /* sky */
+  --color-muted: #6B7280;
+  --color-border: #E5E7EB;
+  --color-success: #16A34A;
+  --color-star: #FBBF24;
   --font-sans: 'Inter', Arial, Helvetica, sans-serif;
   --font-mono: 'Fira Code', Menlo, monospace;
 }
 
-/* 2) Sunset Gradient */
+/* Dark mode (class-based, toggled by Header) */
+.dark {
+  --color-background: #0B0F2D;
+  --color-surface: #141A3A;
+  --color-foreground: #E0E6F8;
+  --color-primary: #3B82F6;
+  --color-secondary: #60A5FA;
+  --color-accent: #38BDF8;
+  --color-muted: #94A3B8;
+  --color-border: #2A335E;
+  --color-success: #4ADE80;
+  --color-star: #FBBF24;
+}
+
+/* Optional alternate palettes (apply class on a wrapper) */
 .theme-sunset {
   --color-background: #FFFAF1;
   --color-foreground: #40241F;
@@ -37,17 +48,6 @@
   --color-secondary: #FFA34F;
   --color-accent: #FFB8B1;
 }
-
-/* 3) Cool Night Sky */
-.theme-night {
-  --color-background: #0B0F2D;
-  --color-foreground: #E0E6F8;
-  --color-primary: #3B82F6;
-  --color-secondary: #6366F1;
-  --color-accent: #22D3EE;
-}
-
-/* 4) Ocean Breeze */
 .theme-ocean {
   --color-background: #E0F7FA;
   --color-foreground: #004D40;
@@ -55,31 +55,12 @@
   --color-secondary: #00838F;
   --color-accent: #26C6DA;
 }
-
-/* 5) Forest Greens */
 .theme-forest {
   --color-background: #E8F5E9;
   --color-foreground: #1B5E20;
   --color-primary: #43A047;
   --color-secondary: #2E7D32;
   --color-accent: #A5D6A7;
-}
-
-/* 6) Midnight Neon */
-.theme-midnight {
-  --color-background: #121212;
-  --color-foreground: #E6E6E6;
-  --color-primary: #BB86FC;
-  --color-secondary: #03DAC6;
-  --color-accent: #CF6679;
-}
-
-/* Optional dark adjustment based on system */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-background: #0a0a0a;
-    --color-foreground: #ededed;
-  }
 }
 
 /* Base element styles */
@@ -90,11 +71,15 @@
     font-family: var(--font-sans);
   }
 
-  a {
-    color: var(--color-accent);
-    text-decoration: none;
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
   }
 
+  a {
+    color: var(--color-secondary);
+    text-decoration: none;
+  }
   a:hover {
     text-decoration: underline;
   }
@@ -105,11 +90,58 @@
   }
 }
 
+/* Reusable component classes (robu-style commerce UI) */
+@layer components {
+  .btn-primary {
+    background-color: var(--color-primary);
+    color: #fff;
+    border-radius: 9999px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    transition: opacity 0.2s, transform 0.2s;
+  }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-primary:active { transform: scale(0.98); }
+
+  .btn-outline {
+    border: 1px solid var(--color-primary);
+    color: var(--color-primary);
+    border-radius: 9999px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    transition: background-color 0.2s, color 0.2s;
+  }
+  .btn-outline:hover {
+    background-color: var(--color-primary);
+    color: #fff;
+  }
+
+  .card {
+    background-color: var(--color-background);
+    border: 1px solid var(--color-border);
+    border-radius: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+
+  .field {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 25%, transparent);
+  }
+}
+
 /* Arrow animation */
 .animate-arrow-forward {
   transition: transform 0.3s;
 }
-
 a:hover .animate-arrow-forward {
   transform: translateX(4px);
 }

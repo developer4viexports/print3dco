@@ -13,6 +13,11 @@ module.exports = {
                 accent: 'var(--color-accent)',
                 background: 'var(--color-background)',
                 foreground: 'var(--color-foreground)',
+                surface: 'var(--color-surface)',
+                muted: 'var(--color-muted)',
+                border: 'var(--color-border)',
+                success: 'var(--color-success)',
+                star: 'var(--color-star)',
             },
             // You can also extend fonts, spacing, etc. here
         },

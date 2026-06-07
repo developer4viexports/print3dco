@@ -1,0 +1,18 @@
+# Local Postgres for Print3DCo development.
+# Usage: docker compose up -d   (then `npx prisma migrate dev`)
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: print3dco-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: print3dco
+      POSTGRES_PASSWORD: print3dco
+      POSTGRES_DB: print3dco
+    ports:
+      - "5432:5432"
+    volumes:
+      - print3dco-pgdata:/var/lib/postgresql/data
+
+volumes:
+  print3dco-pgdata:

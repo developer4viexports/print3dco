@@ -1,0 +1,107 @@
+// Prisma schema for Print3DCo
+// Datasource: PostgreSQL. To run locally use the provided docker-compose.yml
+// and set DATABASE_URL in .env (see .env.example).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// An uploaded 3D model file + its computed geometry stats.
+model Upload {
+  id        String   @id @default(cuid())
+  filename  String
+  storedPath String
+  sizeBytes Int
+  volume    Float    @default(0) // mm^3 (signed-tetrahedron volume)
+  area      Float    @default(0) // mm^2
+  length    Float    @default(0)
+  width     Float    @default(0)
+  height    Float    @default(0)
+  createdAt DateTime @default(now())
+
+  quotes Quote[]
+}
+
+// A priced configuration for a model.
+model Quote {
+  id        String   @id @default(cuid())
+  upload    Upload?  @relation(fields: [uploadId], references: [id])
+  uploadId  String?
+  material  String
+  color     String
+  quality   String // e.g. "0.2mm" | "0.4mm"
+  infill    Int // percentage 10-100
+  finish    String
+  unit      String // "mm" | "inch"
+  quantity  Int      @default(1)
+  unitPrice Float
+  total     Float
+  createdAt DateTime @default(now())
+
+  orderItems OrderItem[]
+}
+
+// A placed (guest) order.
+model Order {
+  id          String   @id @default(cuid())
+  orderNumber String   @unique
+  name        String
+  email       String
+  phone       String?
+  address     String
+  city        String?
+  postal      String?
+  country     String?
+  subtotal    Float
+  shipping    Float    @default(0)
+  discount    Float    @default(0)
+  total       Float
+  status      String   @default("PROCESSING") // PROCESSING | PRINTING | SHIPPED | DELIVERED
+  paymentRef  String? // simulated payment reference
+  createdAt   DateTime @default(now())
+
+  items OrderItem[]
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId   String
+  quote     Quote?  @relation(fields: [quoteId], references: [id])
+  quoteId   String?
+  name      String
+  config    Json // full configuration snapshot (material, color, infill, etc.)
+  quantity  Int     @default(1)
+  unitPrice Float
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  name      String
+  rating    Int // 1-5
+  body      String
+  createdAt DateTime @default(now())
+}
+
+// Reference data (seeded) — available materials and colors.
+model Material {
+  id      String  @id @default(cuid())
+  key     String  @unique
+  name    String
+  tech    String
+  density Float
+  price   Float // per gram (INR)
+  unit    String  @default("g")
+}
+
+model Color {
+  id   String @id @default(cuid())
+  key  String @unique
+  name String
+  hex  String
+}
