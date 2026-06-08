@@ -1,7 +1,7 @@
 // src/app/upload/page.tsx — robu.in-style "3D Printing Service" product page.
 'use client';
 
-import React, { FC, Suspense, useMemo, useRef, useState, ChangeEvent } from 'react';
+import React, { FC, Suspense, useEffect, useMemo, useRef, useState, ChangeEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Canvas, useLoader } from '@react-three/fiber';
@@ -56,39 +56,154 @@ function calculateSurfaceArea(g: THREE.BufferGeometry): number {
   return area;
 }
 
-function computeDimensions(g: THREE.BufferGeometry): Dimensions {
-  g.computeBoundingBox();
-  const bb = g.boundingBox!;
+// Volume/area assume non-indexed triangle soup (positions in groups of 3).
+// OBJ/STL loaders give non-indexed geometry, but normalize just in case.
+function geometryStats(geo: THREE.BufferGeometry): { volume: number; area: number; triangles: number } {
+  const g = geo.index ? geo.toNonIndexed() : geo;
   return {
-    length: parseFloat((bb.max.x - bb.min.x).toFixed(2)),
-    width: parseFloat((bb.max.y - bb.min.y).toFixed(2)),
-    height: parseFloat((bb.max.z - bb.min.z).toFixed(2)),
-    volume: parseFloat(calculateVolume(g).toFixed(2)),
-    area: parseFloat(calculateSurfaceArea(g).toFixed(2)),
+    volume: calculateVolume(g),
+    area: calculateSurfaceArea(g),
+    triangles: Math.floor(g.attributes.position.count / 3),
   };
 }
 
+const round2 = (n: number) => parseFloat(n.toFixed(2));
+
+// Approx. wall thickness for thin/open meshes (≈3 perimeters at a 0.4 mm nozzle).
+const SHELL_THICKNESS_MM = 1.2;
+// Below this fraction of the bounding box, the signed volume is unreliable
+// (the mesh is open / non-watertight) — fall back to a shell estimate.
+const MIN_SOLIDITY = 0.05;
+
+// Pick the best material-volume estimate for pricing.
+// Watertight solids → true signed volume. Thin/open shells (most scanned or
+// CAD car/cover models) → surface area × wall thickness, capped at the box.
+function materialVolume(meshVolume: number, area: number, bboxVolume: number): { volume: number; method: 'solid' | 'shell' } {
+  const solidity = bboxVolume > 0 ? meshVolume / bboxVolume : 0;
+  if (meshVolume > 0 && solidity >= MIN_SOLIDITY) {
+    return { volume: meshVolume, method: 'solid' };
+  }
+  const shell = Math.min(area * SHELL_THICKNESS_MM, bboxVolume * 0.9);
+  return { volume: shell, method: 'shell' };
+}
+
+// Analyze a loaded model into dimensions. Handles STL (single geometry) and
+// OBJ (a group that may contain MANY meshes — all are aggregated).
+function analyzeModel(data: THREE.BufferGeometry | THREE.Group, ext: 'stl' | 'obj'): Dimensions {
+  console.groupCollapsed(`%c[upload] analyzing ${ext.toUpperCase()} model`, 'color:#2563EB;font-weight:bold');
+
+  let meshVolume = 0;
+  let area = 0;
+  let triangles = 0;
+  let meshCount = 0;
+  const bbox = new THREE.Box3();
+
+  if (ext === 'stl') {
+    const g = data as THREE.BufferGeometry;
+    const stats = geometryStats(g);
+    meshVolume = stats.volume;
+    area = stats.area;
+    triangles = stats.triangles;
+    meshCount = 1;
+    g.computeBoundingBox();
+    if (g.boundingBox) bbox.copy(g.boundingBox);
+  } else {
+    // OBJ: walk every mesh, sum volume + area, union the bounding box.
+    const group = data as THREE.Group;
+    group.updateMatrixWorld(true);
+    group.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.geometry) return;
+      meshCount += 1;
+      const geo = (mesh.geometry as THREE.BufferGeometry).clone();
+      geo.applyMatrix4(mesh.matrixWorld); // respect per-mesh transforms
+      const stats = geometryStats(geo);
+      meshVolume += stats.volume;
+      area += stats.area;
+      triangles += stats.triangles;
+      geo.computeBoundingBox();
+      if (geo.boundingBox) bbox.union(geo.boundingBox);
+      console.log(`mesh #${meshCount} "${mesh.name || 'unnamed'}":`, { triangles: stats.triangles, volumeMm3: round2(stats.volume) });
+      geo.dispose();
+    });
+  }
+
+  const size = new THREE.Vector3();
+  if (!bbox.isEmpty()) bbox.getSize(size);
+  const bboxVolume = size.x * size.y * size.z;
+
+  const { volume, method } = materialVolume(meshVolume, area, bboxVolume);
+
+  const dims: Dimensions = {
+    length: round2(size.x),
+    width: round2(size.y),
+    height: round2(size.z),
+    volume: round2(volume),
+    area: round2(area),
+  };
+
+  console.log(`meshes: ${meshCount}, triangles: ${triangles}`);
+  console.log('mesh (signed) volume mm³:', round2(meshVolume), '| bbox volume mm³:', round2(bboxVolume));
+  console.log(`material volume mm³: ${dims.volume} (method: ${method})`);
+  console.log('dimensions (mm):', dims);
+  if (meshCount === 0) console.warn('[upload] no meshes found — cannot compute details');
+  if (method === 'shell') console.warn('[upload] mesh appears open/thin — used surface-area shell estimate for material volume');
+  if (Math.max(size.x, size.y, size.z) < 5) console.warn('[upload] model is very small (<5 mm) — it may be modeled in cm/m/inch and need scaling before printing');
+  console.groupEnd();
+  return dims;
+}
+
+// Per-material surface look so switching material visibly changes the preview.
+const MATERIAL_SURFACE: Record<string, { metalness: number; roughness: number }> = {
+  PLA: { metalness: 0.1, roughness: 0.7 },
+  ABS: { metalness: 0.1, roughness: 0.6 },
+  PETG: { metalness: 0.25, roughness: 0.3 },
+  NYLON: { metalness: 0.15, roughness: 0.65 },
+  RESIN: { metalness: 0.35, roughness: 0.15 },
+  TPU: { metalness: 0.1, roughness: 0.8 },
+};
+
 // ---------- 3D model renderer ----------
-const Model: FC<{ fileUrl: string; colorHex: string; fileType: 'stl' | 'obj' }> = ({
+const Model: FC<{ fileUrl: string; colorHex: string; fileType: 'stl' | 'obj'; material: string }> = ({
   fileUrl,
   colorHex,
   fileType,
+  material,
 }) => {
+  const surface = MATERIAL_SURFACE[material] ?? { metalness: 0.2, roughness: 0.6 };
   const loaded = useLoader(fileType === 'obj' ? OBJLoader : STLLoader, fileUrl) as
     | THREE.BufferGeometry
     | THREE.Group;
+
+  // Recolor every mesh of an OBJ group so the selected color is reflected live.
+  useEffect(() => {
+    if (fileType !== 'obj') return;
+    (loaded as THREE.Group).traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.material = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(colorHex),
+        metalness: surface.metalness,
+        roughness: surface.roughness,
+      });
+    });
+  }, [loaded, colorHex, fileType, surface.metalness, surface.roughness]);
 
   if (fileType === 'obj') {
     return <primitive object={loaded as THREE.Group} />;
   }
   return (
     <mesh geometry={loaded as THREE.BufferGeometry} rotation={[-Math.PI / 2, 0, 0]}>
-      <meshStandardMaterial color={colorHex} metalness={0.2} roughness={0.6} />
+      <meshStandardMaterial color={colorHex} metalness={surface.metalness} roughness={surface.roughness} />
     </mesh>
   );
 };
 
 const EMPTY_DIMS: Dimensions = { volume: 0, area: 0, length: 0, width: 0, height: 0 };
+
+// How many millimetres one unit of the uploaded file represents.
+type SourceUnit = 'mm' | 'cm' | 'm' | 'inch';
+const UNIT_TO_MM: Record<SourceUnit, number> = { mm: 1, cm: 10, m: 1000, inch: 25.4 };
 
 const ProductPage: FC = () => {
   const router = useRouter();
@@ -103,6 +218,10 @@ const ProductPage: FC = () => {
   const [uploadId, setUploadId] = useState<string | undefined>(undefined);
   const [added, setAdded] = useState(false);
 
+  // Source-units + scale so meter/inch/cm-authored models can be sized for print.
+  const [srcUnit, setSrcUnit] = useState<SourceUnit>('mm');
+  const [scalePct, setScalePct] = useState(100);
+
   const [cfg, setCfg] = useState<ConfiguratorValue>({
     material: 'PLA',
     color: 'white',
@@ -116,17 +235,30 @@ const ProductPage: FC = () => {
   const onChange = <K extends keyof ConfiguratorValue>(key: K, val: ConfiguratorValue[K]) =>
     setCfg((c) => ({ ...c, [key]: val }));
 
+  // Apply source-unit + scale to the raw measured geometry.
+  const scaleFactor = UNIT_TO_MM[srcUnit] * (scalePct / 100);
+  const scaledDims = useMemo<Dimensions>(
+    () => ({
+      length: parseFloat((dimensions.length * scaleFactor).toFixed(2)),
+      width: parseFloat((dimensions.width * scaleFactor).toFixed(2)),
+      height: parseFloat((dimensions.height * scaleFactor).toFixed(2)),
+      area: parseFloat((dimensions.area * scaleFactor ** 2).toFixed(2)),
+      volume: parseFloat((dimensions.volume * scaleFactor ** 3).toFixed(2)),
+    }),
+    [dimensions, scaleFactor]
+  );
+
   const { unitPrice, total, weightGrams } = useMemo(
     () =>
       calculateQuote({
-        volume: dimensions.volume,
+        volume: scaledDims.volume,
         material: cfg.material,
         quality: cfg.quality,
         infill: cfg.infill,
         finish: cfg.finish,
         quantity: cfg.quantity,
       }),
-    [dimensions.volume, cfg]
+    [scaledDims.volume, cfg]
   );
 
   const hasModel = dimensions.volume > 0;
@@ -145,32 +277,36 @@ const ProductPage: FC = () => {
     setAnalyzing(true);
     if (fileInputRef.current) fileInputRef.current.value = '';
 
+    console.log(`[upload] loading ${ext.toUpperCase()} file:`, f.name, `(${(f.size / 1024).toFixed(0)} KB)`);
     const loader = ext === 'obj' ? new OBJLoader() : new STLLoader();
     loader.load(
       url,
       (data) => {
-        let geometry: THREE.BufferGeometry | null = null;
-        if (ext === 'obj') {
-          (data as THREE.Group).traverse((c) => {
-            if ((c as THREE.Mesh).isMesh) geometry = (c as THREE.Mesh).geometry as THREE.BufferGeometry;
-          });
-        } else {
-          geometry = data as THREE.BufferGeometry;
+        const dims = analyzeModel(data as THREE.BufferGeometry | THREE.Group, ext);
+        if (dims.volume <= 0) {
+          console.warn('[upload] model produced zero volume — details may be incomplete', dims);
         }
-        if (!geometry) {
-          setAnalyzing(false);
-          return;
-        }
-        const dims = computeDimensions(geometry);
         setDimensions(dims);
         setAnalyzing(false);
         // Best-effort: persist the upload + geometry to the backend.
         uploadModel(f, dims)
-          .then((res) => setUploadId(res.id))
-          .catch(() => {/* offline / no DB — quoting still works client-side */});
+          .then((res) => {
+            console.log('[upload] saved to backend, uploadId:', res.id);
+            setUploadId(res.id);
+          })
+          .catch((err) => {
+            console.warn('[upload] backend save skipped (quoting still works locally):', err?.message || err);
+          });
       },
-      undefined,
-      () => setAnalyzing(false)
+      (progress) => {
+        if (progress.total) {
+          console.log(`[upload] loading… ${Math.round((progress.loaded / progress.total) * 100)}%`);
+        }
+      },
+      (err) => {
+        console.error('[upload] failed to load/parse model:', err);
+        setAnalyzing(false);
+      }
     );
   };
 
@@ -197,7 +333,7 @@ const ProductPage: FC = () => {
       infill: cfg.infill,
       finish: cfg.finish,
       unit: cfg.unit,
-      dimensions,
+      dimensions: scaledDims,
       weightGrams,
       qty: cfg.quantity,
       unitPrice,
@@ -212,7 +348,7 @@ const ProductPage: FC = () => {
     // Best-effort persistence of the quote.
     createQuote({
       uploadId,
-      volume: dimensions.volume,
+      volume: scaledDims.volume,
       material: cfg.material,
       color: cfg.color,
       quality: cfg.quality,
@@ -282,7 +418,7 @@ const ProductPage: FC = () => {
                     <directionalLight position={[5, 5, 5]} intensity={1} />
                     <Suspense fallback={null}>
                       <Bounds fit clip margin={1.2}>
-                        <Model fileUrl={fileUrl} colorHex={COLOR_MAP[cfg.color]} fileType={fileType} />
+                        <Model fileUrl={fileUrl} colorHex={COLOR_MAP[cfg.color]} fileType={fileType} material={cfg.material} />
                       </Bounds>
                     </Suspense>
                     <OrbitControls makeDefault />
@@ -294,14 +430,72 @@ const ProductPage: FC = () => {
 
             {/* Dimensions strip */}
             {hasModel && (
-              <div className="card p-4 grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-                <div><span className="text-[var(--color-muted)]">Length</span><br />{formatLength(dimensions.length, cfg.unit)}</div>
-                <div><span className="text-[var(--color-muted)]">Width</span><br />{formatLength(dimensions.width, cfg.unit)}</div>
-                <div><span className="text-[var(--color-muted)]">Height</span><br />{formatLength(dimensions.height, cfg.unit)}</div>
-                <div><span className="text-[var(--color-muted)]">Volume</span><br />{formatVolumeCm3(dimensions.volume)}</div>
-                <div><span className="text-[var(--color-muted)]">Surface</span><br />{(dimensions.area / 100).toFixed(2)} cm²</div>
-                <div><span className="text-[var(--color-muted)]">Est. weight</span><br />{formatWeight(weightGrams)}</div>
-              </div>
+              <>
+                <div className="card p-4 grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                  <div><span className="text-[var(--color-muted)]">Length</span><br />{formatLength(scaledDims.length, cfg.unit)}</div>
+                  <div><span className="text-[var(--color-muted)]">Width</span><br />{formatLength(scaledDims.width, cfg.unit)}</div>
+                  <div><span className="text-[var(--color-muted)]">Height</span><br />{formatLength(scaledDims.height, cfg.unit)}</div>
+                  <div><span className="text-[var(--color-muted)]">Volume</span><br />{formatVolumeCm3(scaledDims.volume)}</div>
+                  <div><span className="text-[var(--color-muted)]">Surface</span><br />{(scaledDims.area / 100).toFixed(2)} cm²</div>
+                  <div><span className="text-[var(--color-muted)]">Est. weight</span><br />{formatWeight(weightGrams)}</div>
+                </div>
+
+                {/* Model size & units */}
+                <div className="card p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Model size &amp; units</span>
+                    {scalePct !== 100 || srcUnit !== 'mm' ? (
+                      <button
+                        onClick={() => { setSrcUnit('mm'); setScalePct(100); }}
+                        className="text-xs text-[var(--color-primary)] hover:underline"
+                      >
+                        Reset
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <span className="text-xs text-[var(--color-muted)] block mb-1">Interpret file units as</span>
+                    <div className="flex gap-2">
+                      {(['mm', 'cm', 'm', 'inch'] as SourceUnit[]).map((u) => (
+                        <button
+                          key={u}
+                          onClick={() => setSrcUnit(u)}
+                          className={`flex-1 py-1.5 rounded-lg border text-sm font-medium transition ${
+                            srcUnit === u
+                              ? 'bg-[var(--color-primary)] text-white border-transparent'
+                              : 'border-[var(--color-border)] text-[var(--color-foreground)]'
+                          }`}
+                        >
+                          {u}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-[var(--color-muted)]">Scale</span>
+                      <span className="text-xs font-semibold text-[var(--color-primary)]">{scalePct}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={10}
+                      max={500}
+                      step={5}
+                      value={scalePct}
+                      onChange={(e) => setScalePct(parseInt(e.target.value, 10))}
+                      className="w-full accent-[var(--color-primary)]"
+                    />
+                  </div>
+
+                  {Math.max(scaledDims.length, scaledDims.width, scaledDims.height) < 5 && (
+                    <p className="text-xs text-[var(--color-accent)]">
+                      ⚠ This model is very small — if it should be larger, switch units to cm/m or increase the scale.
+                    </p>
+                  )}
+                </div>
+              </>
             )}
           </div>
 

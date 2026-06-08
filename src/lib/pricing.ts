@@ -118,6 +118,11 @@ export function effectiveVolumeCm3(volumeMm3: number, infillPct: number): number
 }
 
 export function calculateQuote(cfg: QuoteConfig): QuoteResult {
+  // No model yet → nothing to price (don't apply the minimum-charge floor).
+  if (!cfg.volume || cfg.volume <= 0) {
+    return { weightGrams: 0, unitPrice: 0, total: 0 };
+  }
+
   const material = MATERIALS[cfg.material] ?? MATERIALS.PLA;
   const quality = QUALITY[cfg.quality] ?? QUALITY['0.4mm'];
   const finish = FINISHES[cfg.finish] ?? FINISHES.None;
@@ -126,6 +131,7 @@ export function calculateQuote(cfg: QuoteConfig): QuoteResult {
   const effVol = effectiveVolumeCm3(cfg.volume, cfg.infill);
   const weightGrams = effVol * material.density;
   const base = weightGrams * material.price * quality.mult * finish.mult;
+  // Minimum charge per item — only applies once there's a real model to print.
   const unitPrice = Math.max(base, MIN_ITEM_PRICE);
 
   return {
