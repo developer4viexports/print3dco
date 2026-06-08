@@ -7,23 +7,27 @@ export async function middleware(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = token ? await verifySessionToken(token) : null;
 
+  // nextUrl.clone() preserves the configured basePath on redirects.
+  const loginRedirect = () => {
+    const url = req.nextUrl.clone();
+    url.pathname = '/login';
+    url.search = `?redirect=${encodeURIComponent(pathname)}`;
+    return NextResponse.redirect(url);
+  };
+  const homeRedirect = () => {
+    const url = req.nextUrl.clone();
+    url.pathname = '/';
+    url.search = '';
+    return NextResponse.redirect(url);
+  };
+
   if (pathname.startsWith('/admin')) {
-    if (!session) {
-      const url = new URL('/login', req.url);
-      url.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(url);
-    }
-    if (session.role !== 'ADMIN') {
-      return NextResponse.redirect(new URL('/', req.url));
-    }
+    if (!session) return loginRedirect();
+    if (session.role !== 'ADMIN') return homeRedirect();
   }
 
   if (pathname.startsWith('/account')) {
-    if (!session) {
-      const url = new URL('/login', req.url);
-      url.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(url);
-    }
+    if (!session) return loginRedirect();
   }
 
   return NextResponse.next();
