@@ -1,6 +1,7 @@
 // Seeds reference data (materials + colors) and a couple of sample reviews.
 // Run with: npx prisma db seed
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 import { MATERIALS, COLORS } from '../src/lib/pricing';
 
 const prisma = new PrismaClient();
@@ -33,7 +34,22 @@ async function main() {
     });
   }
 
-  console.log(`Seeded ${Object.keys(MATERIALS).length} materials, ${COLORS.length} colors.`);
+  // Default admin account (change the password after first login).
+  const adminEmail = 'admin@print3dco.com';
+  await prisma.user.upsert({
+    where: { email: adminEmail },
+    update: { role: 'ADMIN' },
+    create: {
+      name: 'Admin',
+      email: adminEmail,
+      passwordHash: await bcrypt.hash('admin123', 10),
+      role: 'ADMIN',
+    },
+  });
+
+  console.log(
+    `Seeded ${Object.keys(MATERIALS).length} materials, ${COLORS.length} colors, admin user (${adminEmail} / admin123).`
+  );
 }
 
 main()

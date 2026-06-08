@@ -30,7 +30,7 @@ const LINKS = {
   Support: [
     { label: 'Materials', href: '/materials' },
     { label: 'Your Cart', href: '/cart' },
-    { label: 'Track Order', href: '/upload' },
+    { label: 'Track Order', href: '/track' },
     { label: 'Sign In', href: '/login' },
   ],
 };

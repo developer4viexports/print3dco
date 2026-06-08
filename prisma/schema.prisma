@@ -46,10 +46,24 @@ model Quote {
   orderItems OrderItem[]
 }
 
-// A placed (guest) order.
+// Registered user (optional — orders can still be placed as a guest).
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("USER") // USER | ADMIN
+  createdAt    DateTime @default(now())
+
+  orders Order[]
+}
+
+// A placed order (guest or linked to a user).
 model Order {
   id          String   @id @default(cuid())
   orderNumber String   @unique
+  user        User?    @relation(fields: [userId], references: [id])
+  userId      String?
   name        String
   email       String
   phone       String?

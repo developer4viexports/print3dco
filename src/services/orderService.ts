@@ -18,6 +18,18 @@ export async function getOrder(idOrNumber: string): Promise<OrderDTO> {
   return data;
 }
 
+// Lists the current user's orders (admins receive all orders).
+export async function listMyOrders(): Promise<OrderDTO[]> {
+  const { data } = await api.get<OrderDTO[]>('/orders');
+  return data;
+}
+
+// Admin: update an order's status.
+export async function updateOrderStatus(id: string, status: string): Promise<OrderDTO> {
+  const { data } = await api.patch<OrderDTO>(`/orders/${encodeURIComponent(id)}`, { status });
+  return data;
+}
+
 export async function listReviews(): Promise<ReviewDTO[]> {
   const { data } = await api.get<ReviewDTO[]>('/reviews');
   return data;

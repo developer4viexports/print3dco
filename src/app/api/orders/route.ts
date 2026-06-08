@@ -5,6 +5,7 @@ import { randomBytes } from 'crypto';
 import prisma from 'src/lib/prisma';
 import { shippingFor, round2, COUPONS } from 'src/lib/pricing';
 import { isValidEmail, required } from 'src/utils/validators';
+import { getSession } from 'src/lib/auth';
 
 export const runtime = 'nodejs';
 
@@ -12,6 +13,19 @@ function orderNumber(): string {
   const stamp = Date.now().toString(36).toUpperCase().slice(-6);
   const rand = randomBytes(2).toString('hex').toUpperCase();
   return `P3D-${stamp}${rand}`;
+}
+
+// GET /api/orders — list the current user's orders (or all orders for admins).
+export async function GET() {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+
+  const orders = await prisma.order.findMany({
+    where: session.role === 'ADMIN' ? {} : { userId: session.sub },
+    include: { items: true },
+    orderBy: { createdAt: 'desc' },
+  });
+  return NextResponse.json(orders);
 }
 
 export async function POST(req: NextRequest) {
@@ -39,9 +53,13 @@ export async function POST(req: NextRequest) {
     // Simulated payment — always succeeds. No real charge.
     const paymentRef = `SIMPAY-${randomBytes(6).toString('hex').toUpperCase()}`;
 
+    // Link to the logged-in user if there is a session (guest otherwise).
+    const session = await getSession();
+
     const order = await prisma.order.create({
       data: {
         orderNumber: orderNumber(),
+        userId: session?.sub ?? null,
         name: customer.name,
         email: customer.email,
         phone: customer.phone || null,

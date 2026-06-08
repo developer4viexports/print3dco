@@ -3,8 +3,19 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { SunIcon, MoonIcon, ShoppingCartIcon } from '@heroicons/react/24/outline';
+import { useRouter } from 'next/navigation';
+import { Menu } from '@headlessui/react';
+import {
+  SunIcon,
+  MoonIcon,
+  ShoppingCartIcon,
+  UserCircleIcon,
+  ArrowRightOnRectangleIcon,
+  ClipboardDocumentListIcon,
+  Cog6ToothIcon,
+} from '@heroicons/react/24/outline';
 import { useCartStore, selectCount } from 'src/store/useStore';
+import { useAuth } from 'src/hooks/useAuth';
 
 const navLinks = [
     { name: 'Home', href: '/' },
@@ -17,10 +28,17 @@ const navLinks = [
 ];
 
 export default function Header() {
+    const router = useRouter();
+    const { user, logout } = useAuth();
     const [theme, setTheme] = useState<'light' | 'dark'>('light');
     const [menuOpen, setMenuOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
     const cartCount = useCartStore(selectCount);
+
+    const handleLogout = async () => {
+        await logout();
+        router.push('/');
+    };
 
     // Initialize theme from localStorage (default light).
     useEffect(() => {
@@ -90,12 +108,51 @@ export default function Header() {
                             )}
                         </Link>
 
-                        <Link
-                            href="/login"
-                            className="hidden md:inline-block text-[var(--color-foreground)] hover:text-[var(--color-primary)] font-medium transition-colors"
-                        >
-                            Sign In
-                        </Link>
+                        {/* Account */}
+                        {mounted && user ? (
+                            <Menu as="div" className="relative hidden md:block">
+                                <Menu.Button className="flex items-center gap-1.5 text-[var(--color-foreground)] hover:text-[var(--color-primary)] font-medium transition-colors">
+                                    <UserCircleIcon className="h-6 w-6" />
+                                    <span className="max-w-[8rem] truncate">{user.name.split(' ')[0]}</span>
+                                </Menu.Button>
+                                <Menu.Items className="absolute right-0 mt-2 w-52 origin-top-right rounded-xl bg-[var(--color-background)] border border-[var(--color-border)] shadow-lg p-1.5 focus:outline-none z-50">
+                                    <div className="px-3 py-2 border-b border-[var(--color-border)] mb-1">
+                                        <p className="text-sm font-medium text-[var(--color-foreground)] truncate">{user.name}</p>
+                                        <p className="text-xs text-[var(--color-muted)] truncate">{user.email}</p>
+                                    </div>
+                                    <Menu.Item>
+                                        {({ active }) => (
+                                            <Link href="/account" className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${active ? 'bg-[var(--color-surface)]' : ''}`}>
+                                                <ClipboardDocumentListIcon className="h-5 w-5" /> My Orders
+                                            </Link>
+                                        )}
+                                    </Menu.Item>
+                                    {user.role === 'ADMIN' && (
+                                        <Menu.Item>
+                                            {({ active }) => (
+                                                <Link href="/admin" className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${active ? 'bg-[var(--color-surface)]' : ''}`}>
+                                                    <Cog6ToothIcon className="h-5 w-5" /> Admin Dashboard
+                                                </Link>
+                                            )}
+                                        </Menu.Item>
+                                    )}
+                                    <Menu.Item>
+                                        {({ active }) => (
+                                            <button onClick={handleLogout} className={`flex w-full items-center gap-2 px-3 py-2 rounded-lg text-sm text-[var(--color-primary)] ${active ? 'bg-[var(--color-surface)]' : ''}`}>
+                                                <ArrowRightOnRectangleIcon className="h-5 w-5" /> Sign Out
+                                            </button>
+                                        )}
+                                    </Menu.Item>
+                                </Menu.Items>
+                            </Menu>
+                        ) : (
+                            <Link
+                                href="/login"
+                                className="hidden md:inline-block text-[var(--color-foreground)] hover:text-[var(--color-primary)] font-medium transition-colors"
+                            >
+                                Sign In
+                            </Link>
+                        )}
 
                         {/* Theme Toggle */}
                         <button
@@ -145,13 +202,23 @@ export default function Header() {
                         >
                             Get Instant Quote
                         </Link>
-                        <Link
-                            href="/login"
-                            onClick={() => setMenuOpen(false)}
-                            className="block py-2 border-t border-[var(--color-border)] mt-2 text-[var(--color-foreground)]"
-                        >
-                            Sign In
-                        </Link>
+                        {mounted && user ? (
+                            <div className="border-t border-[var(--color-border)] mt-2 pt-2">
+                                <Link href="/account" onClick={() => setMenuOpen(false)} className="block py-2 text-[var(--color-foreground)]">My Orders</Link>
+                                {user.role === 'ADMIN' && (
+                                    <Link href="/admin" onClick={() => setMenuOpen(false)} className="block py-2 text-[var(--color-foreground)]">Admin Dashboard</Link>
+                                )}
+                                <button onClick={() => { setMenuOpen(false); handleLogout(); }} className="block py-2 text-[var(--color-primary)]">Sign Out</button>
+                            </div>
+                        ) : (
+                            <Link
+                                href="/login"
+                                onClick={() => setMenuOpen(false)}
+                                className="block py-2 border-t border-[var(--color-border)] mt-2 text-[var(--color-foreground)]"
+                            >
+                                Sign In
+                            </Link>
+                        )}
                     </nav>
                 )}
             </div>
